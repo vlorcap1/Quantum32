@@ -169,7 +169,7 @@ Email: arebolledo@udd.cl
 Fecha: 2025-12-01  
 
 **Atribución Original**
-El código original fue creado por **Vicente Lorca**; este proyecto es un derivado y el concepto inicial proviene de Vicente.
+El código original fue creado por **Vicente Lorca** [@vlorcap](https://github.com/vlorcap) ; este proyecto es un derivado y el concepto inicial proviene de Vicente.
 
 ## 📄 Licencia
 
