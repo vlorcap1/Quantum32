@@ -1,3 +1,4 @@
+#include "Arduino.h"
 /*
  * Configuration Header for I2C Multi-Slave Opinion Analysis System
  * 
@@ -42,6 +43,7 @@ const uint8_t SLAVE_ADDRESSES[] = {
 // ============================================================================
 
 #define ENABLE_OLED       true    // Set to false to disable OLED functionality
+bool rtcOK = false;
 #define OLED_ADDRESS      0x3C    // Common address for SSD1306/SH1106 (or 0x3D)
 
 // U8g2 Constructor Selection
@@ -56,7 +58,6 @@ const uint8_t SLAVE_ADDRESSES[] = {
 // ============================================================================
 // RTC CONFIGURATION
 // ============================================================================
-
 #define ENABLE_RTC        true    // Set to false to disable RTC functionality
 #define RTC_ADDRESS       0x68    // DS3231 RTC address (fixed)
 
@@ -104,8 +105,8 @@ const uint8_t SLAVE_ADDRESSES[] = {
 #define ENABLE_SD_LOGGING true    // Set to false to disable SD logging
 #define SD_CS_PIN         7       // Chip Select pin
 #define SD_MOSI_PIN       6       // MOSI pin
-#define SD_MISO_PIN       5       // MISO pin
-#define SD_SCLK_PIN       4       // SCLK pin
+#define SD_MISO_PIN       4       // MISO pin en la version 1 es 5
+#define SD_SCLK_PIN       5       // SCLK pin en la version 1 es 4
 #define SD_FILENAME       "/datalog.csv"
 
 // ============================================================================

@@ -26,7 +26,7 @@
 // CONFIGURATION - CHANGE THIS FOR EACH SLAVE!
 // ============================================================================
 
-#define SLAVE_ADDRESS     0x13    // CHANGE THIS: 0x10, 0x11, 0x12, 0x13, etc.
+#define SLAVE_ADDRESS     0x10    // CHANGE THIS: 0x10, 0x11, 0x12, 0x13, etc.
 #define N_SAMPLES         256     // Number of samples to process per cycle
 
 // ============================================================================

@@ -76,7 +76,17 @@ uint32_t totalNeutral = 0;
 // ============================================================================
 
 void setup() {
-  delay(3000);
+
+  rgbLed.begin();
+  rgbLed.setBrightness(50);  // Set brightness (0-255)
+  rgbLed.show();             // Initialize all pixels to 'off'
+  Serial.println(F("RGB LED initialized successfully"));
+
+  // Startup animation
+  rgbLed.setPixelColor(0, RGB_COLOR_IDLE);
+  rgbLed.show();
+  delay(500);
+
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println(F("=== I2C Master - Opinion Analysis System ==="));
   Serial.print(F("Number of slaves: "));
@@ -107,25 +117,13 @@ void setup() {
     if (!rtc.begin()) {
       Serial.println(F("ERROR: RTC not found!"));
       Serial.println(F("Check wiring to DS3231"));
+      rtcOK = false;
     } else {
+      rtcOK = true;
       Serial.println(F("RTC initialized successfully"));
-      if (rtc.lostPower()) {
-        Serial.println(F("RTC lost power, setting time to compile time"));
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-      }
     }
   }
 
-
-  rgbLed.begin();
-  rgbLed.setBrightness(50);  // Set brightness (0-255)
-  rgbLed.show();             // Initialize all pixels to 'off'
-  Serial.println(F("RGB LED initialized successfully"));
-
-  // Startup animation
-  rgbLed.setPixelColor(0, RGB_COLOR_IDLE);
-  rgbLed.show();
-  delay(500);
 
   // Initialize SD Card
   if (ENABLE_SD_LOGGING) {
@@ -355,7 +353,8 @@ void displayResults() {
   // Print to Serial
   Serial.println(F("======== CLUSTER ========"));
 
-  if (ENABLE_RTC) {
+  if (rtcOK == true) {
+
     DateTime now = rtc.now();
     Serial.print(F("Time: "));
     Serial.print(now.hour());
@@ -384,7 +383,7 @@ void displayResults() {
   display.drawLine(0, 12, 128, 12);
 
   // Timestamp
-  if (ENABLE_RTC) {
+  if (rtcOK ==true) {
     DateTime now = rtc.now();
     char timeStr[20];
     sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
@@ -481,7 +480,7 @@ void logToSD() {
 
   // Timestamp
   String timestamp = "";
-  if (ENABLE_RTC) {
+  if (rtcOK == true) {
     DateTime now = rtc.now();
     char timeStr[20];
     sprintf(timeStr, "%04d-%02d-%02d %02d:%02d:%02d",
