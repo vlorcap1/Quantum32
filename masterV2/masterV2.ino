@@ -147,6 +147,20 @@ static uint32_t lastBmeRetryMs = 0;
 static uint32_t lastRtcRetryMs = 0;
 static uint32_t lastOledRetryMs = 0;
 
+// Graph history (Toy Holography Stability)
+// Size increased to 70 to ensure it fills the visual graph width (~66px)
+static uint8_t reconHistory[70]; 
+static uint8_t historyIdx = 0;
+
+// VISUALIZATION MAPPING EXPLANATION:
+// 1. BULK BAR: Represents the "integrity of the bulk spacetime". 
+//    - 100% means we have fully reconstructed the interior geometry from the boundary data.
+//    - <100% means information loss (Black Hole entropy increase / Thermal noise).
+// 2. BOUNDARY MAP (2x2): Represents the state of the "Boundary CFT" (Conformal Field Theory).
+//    - Filled box = Low noise/entanglement entropy.
+//    - Empty/Small box = High noise or disconnected region (information scrambling).
+// 3. GRAPH: Shows the "Time Evolution" of the holographic reconstruction stability.
+
 static uint8_t pollIndex = 0;        // which slave we poll next
 static uint8_t slavesPolledThisTick = 0;
 static bool tickInProgress = false;
@@ -314,6 +328,10 @@ static void computeBulkFromBoundary() {
 
   uint8_t reconCount = popcount8(bulk_mask);
   recon_ratio = (N_LOGICALS > 0) ? (100.0f * reconCount / (float)N_LOGICALS) : 0.0f;
+  
+  // Update history
+  reconHistory[historyIdx] = (uint8_t)recon_ratio;
+  historyIdx = (historyIdx + 1) % (sizeof(reconHistory) / sizeof(reconHistory[0]));
 }
 
 // ============================================================================
@@ -371,47 +389,66 @@ static void drawOLED() {
 
   display.clearBuffer();
 
-  // Header
+  // Header -> T: tick
   display.setFont(u8g2_font_6x10_tr);
   char line1[32];
   snprintf(line1, sizeof(line1), "T:%lu", (unsigned long)tickCounter);
   display.drawStr(0, 10, line1);
 
-  // Slave status (OK/X)
+  // Slave status (OK/X) -> Reverted to text
   display.setFont(u8g2_font_4x6_tr);
   for (uint8_t i = 0; i < NUM_SLAVES && i < 4; i++) {
-    int x = 40 + i * 10;
+    int x = 45 + i * 15; // Spaced out slightly
     display.drawStr(x, 10, slaveObs[i].valid ? "OK" : "X");
   }
 
   // Reconstruction bar (0..100)
+  // Row Y=14 to 24
   display.setFont(u8g2_font_6x10_tr);
-  display.drawStr(0, 24, "Bulk:");
-  display.drawFrame(32, 16, 92, 10);
-  int barW = (int)(0.92f * recon_ratio); // 92 px max
+  display.drawStr(0, 24, "Bulk");
+  
+  int barX = 28;
+  int barY = 14;
+  int barMaxW = 98;
+  int barH = 12;
+  
+  display.drawFrame(barX, barY, barMaxW, barH);
+  
+  int barW = (int)((recon_ratio / 100.0f) * (barMaxW - 2)); 
   if (barW < 0) barW = 0;
-  if (barW > 92) barW = 92;
-  display.drawBox(32, 16, barW, 10);
+  if (barW > (barMaxW - 2)) barW = (barMaxW - 2);
+  
+  display.drawBox(barX + 1, barY + 1, barW, barH - 2);
 
-  // Ratio text
+  // Ratio text (XOR mode)
   char ratioStr[16];
   snprintf(ratioStr, sizeof(ratioStr), "%.0f%%", (double)recon_ratio);
-  display.drawStr(100, 24, ratioStr);
+  
+  int strWidth = display.getStrWidth(ratioStr);
+  int textX = barX + (barMaxW - strWidth) / 2;
+  int textY = barY + 9;
 
-  // 2x2 boundary map
+  display.setDrawColor(2); 
+  display.setFontMode(1);  
+  display.drawStr(textX, textY, ratioStr);
+  display.setDrawColor(1); 
+  display.setFontMode(0);  
+
+  // Map (Left side)
   // Cells: 0 1
   //        2 3
+  // Move down slightly
   int baseX = 0;
-  int baseY = 30;
-  int cellW = 28;
-  int cellH = 14;
+  int baseY = 32;
+  int cellW = 20;
+  int cellH = 10; // 32+22 = 54
+  
   for (uint8_t i = 0; i < 4; i++) {
-    int cx = baseX + (i % 2) * (cellW + 4);
-    int cy = baseY + (i / 2) * (cellH + 4);
+    int cx = baseX + (i % 2) * (cellW + 2);
+    int cy = baseY + (i / 2) * (cellH + 2);
     display.drawFrame(cx, cy, cellW, cellH);
 
     if (i < NUM_SLAVES && slaveObs[i].valid) {
-      // Fill proportional to (1 - clamp(noise))
       float n = slaveObs[i].noise;
       if (n < 0.0f) n = 0.0f;
       if (n > 1.0f) n = 1.0f;
@@ -419,26 +456,52 @@ static void drawOLED() {
       if (fillW < 0) fillW = 0;
       display.drawBox(cx + 1, cy + 1, fillW, cellH - 2);
     }
-
-    // Label
-    display.setFont(u8g2_font_4x6_tr);
-    char lab[8];
-    snprintf(lab, sizeof(lab), "S%u", (unsigned)i);
-    display.drawStr(cx + cellW - 12, cy + cellH - 3, lab);
   }
 
-  // Footer masks
+  // Graph Area (Right side)
+  // Made narrower to not cover "half"
+  int graphX = 60; 
+  int graphW = 68; // 60 to 128
+  int graphY = 32;
+  int graphH = 20; // Ends at 52, leaving space below for time
+  
+  display.drawFrame(graphX, graphY, graphW, graphH);
+  
+  int count = sizeof(reconHistory) / sizeof(reconHistory[0]);
+  for (int i = 0; i < graphW - 2; i++) {
+     int idx = (historyIdx - 1 - i);
+     while(idx < 0) idx += count;
+     idx = idx % count;
+     
+     uint8_t val = reconHistory[idx];
+     int pixelH = (int)((val / 100.0f) * (graphH - 2));
+     if(pixelH > (graphH - 2)) pixelH = graphH - 2;
+     
+     if (i < count) {
+       display.drawVLine(graphX + graphW - 2 - i, graphY + graphH - 1 - pixelH, pixelH);
+     }
+  }
+
+  // Footer / Time
   display.setFont(u8g2_font_4x6_tr);
-  char footer[40];
-  snprintf(footer, sizeof(footer), "B:0x%02X K:0x%02X", (unsigned)boundary_mask, (unsigned)bulk_mask);
-  display.drawStr(60, 56, footer);
+  
+  // Left: Masks + Noise
+  char footer[32];
+  snprintf(footer, sizeof(footer), "B:%02X K:%02X N:%.2f", (unsigned)boundary_mask, (unsigned)bulk_mask, (double)globalNoise);
+  display.drawStr(0, 62, footer);
 
-  // Optional env
-  if (bmeOK) {
-    char env[32];
-    snprintf(env, sizeof(env), "T:%.1fC H:%.0f%%", (double)currentTemp, (double)currentHum);
-    display.drawStr(0, 56, env);
+  // Right: Time (below graph)
+  char timeStr[16];
+  if (rtcOK) {
+      DateTime now = rtc.now();
+      snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  } else {
+      snprintf(timeStr, sizeof(timeStr), "--:--:--");
   }
+  // Align right-ish or center under graph
+  // Graph starts at 60, width 68. Center approx 94.
+  // Str width approx 6 chars * 4 = 24.
+  display.drawStr(75, 62, timeStr);
 
   display.sendBuffer();
 }

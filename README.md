@@ -4,11 +4,13 @@ Sistema distribuido basado en Arduino que utiliza comunicación I2C para coordin
 
 ## 📋 Descripción
 
-Este proyecto implementa una arquitectura maestro-esclavo donde:
-- **1 Maestro (Master)**: Coordina la comunicación I2C, agrega resultados, monitorea el ambiente (Temp/Hum), registra datos en SD y muestra información en pantalla OLED con timestamps del RTC DS3231.
-- **4+ Esclavos (Slaves)**: Procesan datos de opiniones y responden a solicitudes del maestro.
 
-El sistema está diseñado para ser escalable, permitiendo agregar más esclavos según sea necesario.
+Este proyecto implementa una **simulación pedagógica de holografía (Toy Holography)** inspirada en el principio holográfico y la correspondencia AdS/CFT. Utiliza una arquitectura maestro-esclavo donde:
+
+- **Maestro (Bulk)**: Representa el volumen ("bulk") del espacio-tiempo. Reconstruye información lógica a partir de las correlaciones de los esclavos, monitorea el ambiente y visualiza la "reconstrucción holográfica".
+- **Esclavos (Boundary)**: Representan el borde ("boundary") del sistema. Generan observables locales con ruido y pérdida simulada que el maestro utiliza para inferir el estado del volumen.
+
+El sistema ilustra cómo propiedades, corrección de errores y geometrías emergentes pueden surgir de interacciones distribuidas simples sobre un bus I2C.
 
 ## 🔧 Hardware Requerido
 
@@ -99,36 +101,27 @@ Abrir el monitor serial (115200 baud) para ver:
 - Confirmación de escritura en SD (`>> Data saved to SD`)
 - Mensajes de error o advertencias
 
-### Pantalla OLED
-La pantalla muestra:
-- Título del sistema
-- Timestamp actual
-- Estado de conexión de esclavos (OK/X)
-- Porcentajes de opiniones (Fav, Con, Neu)
-- Datos ambientales (Temp, Hum)
+### Pantalla OLED (MasterV2)
+La pantalla ahora visualiza la dinámica de la simulación en tiempo real:
+- **Header**: `T:####` (Contador de Ticks de simulación).
+- **Status Row**: Estado de cada esclavo (Cuadro lleno = OK, Vacío = Missing).
+- **Bulk Reconstruction**: Barra de progreso que muestra qué porcentaje de la lógica del "bulk" ha sido recuperada exitosamente desde el borde.
+  - El porcentaje se muestra centrado con contraste dinámico para evitar solapamiento.
+- **Boundary Map (2x2)**: Visualización matricial del ruido en cada esclavo (cuadros más llenos = menos ruido/mejor señal).
+- **History Graph**: Un gráfico histórico a la derecha que muestra la evolución de la `Reconstruction Ratio` en los últimos 40 ticks.
+- **Footer**: Máscaras de bits (Boundary/Bulk) y datos ambientales.
 
 ### Registro en Tarjeta SD
-El sistema crea/abre el archivo `datalog.csv` y registra una línea por ciclo con el formato:
-`Timestamp,Favor,Contra,Neutral,Total,Temp,Humidity`
+El sistema registra en `datalog.csv`:
+`timestamp, tick, active_slaves, boundary_mask, bulk_mask, recon_ratio, loss_sum, noise_avg, temp, hum`
 
-### Indicador LED RGB
-El LED RGB indica el estado del sistema:
-- **Azul**: En espera (Idle)
-- **Amarillo**: Leyendo datos de esclavos
-- **Verde**: Lectura exitosa (todos los esclavos respondieron)
-- **Naranja**: Advertencia (algunos esclavos fallaron)
-- **Rojo**: Error (ningún esclavo respondió)
-
-### Ejemplo de Salida Serial
-```
-======== CLUSTER ========
-Time: 11:15:32
-A favor  : 42.3 %
-En contra: 34.8 %
-Dudando  : 22.9 %
-==========================
->> Data saved to SD
-```
+### Disclaimer de "Veracidad Científica"
+> [!IMPORTANT]
+> **Nota sobre la precisión científica**:
+> Este código es un **"modelo de juguete" (toy model)** con fines educativos y de prototipado.
+> *   **No es** una simulación cuántica real (no hay entrelazamiento cuántico real ni hamiltonianos complejos).
+> *   La "Reconstrucción del Bulk" usa una lógica de máscaras de bits simplificada para *ilustrar* conceptos de corrección de errores cuánticos, pero no implementa un código corrección de errores (QECC) riguroso como el código de HaPPY o Shor.
+> *   Su objetivo es proveer una intuición física de cómo información local en el borde puede redundar en información robusta en el volumen, usando hardware clásico accesible.
 
 ## 🔍 Solución de Problemas
 
