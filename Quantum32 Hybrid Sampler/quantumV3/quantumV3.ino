@@ -38,6 +38,7 @@ static volatile uint8_t rxLen = 0;
 static char rxBuf[I2C_MAX_RX + 1];
 
 static char txBuf[32]; // guaranteed short
+static volatile uint8_t txLen = 0;
 
 // ============================ STATE =============================
 static uint32_t currentTick = 0;

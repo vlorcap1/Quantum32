@@ -73,20 +73,21 @@ static constexpr uint8_t NUM_SLAVES = sizeof(SLAVE_ADDRESSES) / sizeof(SLAVE_ADD
 // I2C SETTINGS
 // ============================================================================
 static constexpr uint32_t I2C_CLOCK_SPEED = 100000;
-static constexpr uint16_t I2C_TIMEOUT_MS  = 100;
+static constexpr uint16_t I2C_TIMEOUT_MS  = 200; // Increased for stability
 static constexpr uint8_t  I2C_MAX_RX_BYTES = 32;
 
 // ============================================================================
 // TIMING (NON-BLOCKING SCHEDULER)
 // ============================================================================
 static constexpr uint32_t TICK_PERIOD_MS       = 1500;  // free-running tick if no PC batch
+static constexpr uint32_t MIN_BATCH_PERIOD_MS  = 100;   // THROTTLE: Max 10 ticks/sec (very stable)
 static constexpr uint32_t DISPLAY_PERIOD_MS    = 200;
 static constexpr uint32_t HEALTH_PERIOD_MS     = 2000;
 static constexpr uint32_t SD_RETRY_PERIOD_MS   = 10000;
 static constexpr uint32_t BME_RETRY_PERIOD_MS  = 10000;
 static constexpr uint32_t RTC_RETRY_PERIOD_MS  = 10000;
 static constexpr uint32_t OLED_RETRY_PERIOD_MS = 10000;
-static constexpr uint8_t  SLAVE_READS_PER_LOOP = 1;
+static constexpr uint8_t  SLAVE_READS_PER_LOOP = 1; // Back to 1 for stability
 
 // Buttons debounce (non-blocking)
 static constexpr uint32_t BTN_DEBOUNCE_MS = 180;
@@ -408,7 +409,7 @@ static bool readObsFromSlave(uint8_t idx, uint8_t addr, uint32_t expectedTick) {
   }
 
   // Parse failed (likely truncation)
-  Serial.printf("[I2C] Parse fail 0x%02X: '%s'\n", addr, buf);
+  // Serial.printf("[I2C] Parse fail 0x%02X: '%s'\n", addr, buf);
   return false;
 }
 
@@ -660,7 +661,9 @@ static void pollSlavesStep() {
     uint8_t idx = pollIndex;
     uint8_t addr = SLAVE_ADDRESSES[idx];
 
+    // Read with robustness delay
     (void)readObsFromSlave(idx, addr, tickCounter);
+    delay(4); // Short breather
 
     pollIndex++;
     slavesPolledThisTick++;
@@ -668,9 +671,12 @@ static void pollSlavesStep() {
   }
 
   if (slavesPolledThisTick >= NUM_SLAVES) {
-    closeTick();
+     // Serial.println("[DBG] Polling Complete -> Closing Tick");
+     closeTick();
   }
 }
+
+
 
 // ============================================================================
 // SERIAL COMMAND PARSER (PC CONTROL)
@@ -873,13 +879,18 @@ void loop() {
   // Batch driver has priority over free-running tick rate
   if (batchActive) {
     if (!tickInProgress) {
-        // Not currently waiting for slaves. Decide what to do next.
-        if (batchBurn > 0) {
-            startNewTick();
-        } else {
-            // Normal sampling or stride
-            // We start a tick regardless, stride logic is handled on completion
-            startNewTick();
+        // RATE LIMIT: Don't hammer the bus too hard
+        if (nowMs - lastTickMs >= MIN_BATCH_PERIOD_MS) {
+            
+            // Not currently waiting for slaves. Decide what to do next.
+            if (batchBurn > 0) {
+                startNewTick();
+                lastTickMs = nowMs; 
+            } else {
+                // Normal sampling or stride
+                startNewTick();
+                lastTickMs = nowMs;
+            }
         }
     }
   }
@@ -890,6 +901,9 @@ void loop() {
       
       // If poll finished this cycle (tick just closed)
       if (!tickInProgress && batchActive) {
+          // DEBUG: Trace why batch is stuck
+          Serial.printf("[BATCH_DBG] Burn=%u Stride=%u Rem=%u\n", (unsigned)batchBurn, (unsigned)strideCounter, (unsigned)batchRemaining);
+
           if (batchBurn > 0) {
               batchBurn--;
           } else {
@@ -926,7 +940,7 @@ void loop() {
   // Duplicate free-running scheduler removed.
   // The block above (lines 920-924) handles it correctly with !batchActive check.
 
-  if (tickInProgress) pollSlavesStep();
+
 
   if (oledOK && (nowMs - lastDisplayMs >= DISPLAY_PERIOD_MS)) {
     lastDisplayMs = nowMs;
