@@ -1,8 +1,51 @@
-# pc_client_maxcut_spyder.py
-# Spyder-friendly: no argparse, optional interactive prompts, internal defaults.
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+                    QUANTUM32 HYBRID SAMPLER - CLIENTE MAX-CUT
+===============================================================================
+
+DESCRIPCIÓN:
+    Este script es el cliente de PC para el sistema Quantum32 Hybrid Sampler.
+    Se comunica con el Maestro (ESP32) vía puerto serial para recolectar
+    muestras de un optimizador estocástico inspirado en computación cuántica.
+
+PROBLEMA QUE RESUELVE - MAX-CUT:
+    Max-Cut es un problema clásico de optimización combinatoria (NP-hard).
+    Dado un grafo con N nodos, el objetivo es dividir los nodos en dos grupos
+    de manera que se maximice el número de aristas "cortadas" (que conectan
+    nodos de grupos distintos).
+    
+    En este demo, usamos un grafo en anillo de 16 nodos (4 esclavos × 4 bits).
+    El score máximo teórico para un anillo de N nodos es N (todas las aristas
+    cortadas), lo cual se logra alternando 0-1-0-1-0-1...
+
+CÓMO FUNCIONA:
+    1. El script envía parámetros al Maestro (@PARAM, @GET)
+    2. El Maestro coordina los Esclavos que generan configuraciones aleatorias
+    3. Cada configuración (16 bits) se evalúa contra el grafo Max-Cut
+    4. Se registra la mejor solución encontrada durante el muestreo
+
+OUTPUTS:
+    - Consola: Progreso en tiempo real y mejor solución
+    - CSV: Archivo timestamped con todos los datos del batch
+    - Gráficos: Evolución del score, histograma, visualización del grafo
+
+DEPENDENCIAS:
+    - pyserial (pip install pyserial)
+    - numpy
+    - matplotlib
+    - networkx (opcional, para visualización del grafo)
+
+AUTOR: Alejandro Rebolledo (arebolledo@udd.cl)
+LICENCIA: CC BY-NC 4.0
+===============================================================================
+"""
 
 import time
 import sys
+import os
+from datetime import datetime
 import numpy as np
 
 try:
@@ -11,6 +54,20 @@ except Exception as e:
     serial = None
     print("ERROR: pyserial is not available. Install it with: pip install pyserial")
     print("Details:", e)
+
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_OK = True
+except ImportError:
+    MATPLOTLIB_OK = False
+    print("WARNING: matplotlib not available. Graphs will be skipped.")
+
+try:
+    import networkx as nx
+    NETWORKX_OK = True
+except ImportError:
+    NETWORKX_OK = False
+    print("WARNING: networkx not available. Graph visualization will be skipped.")
 
 
 # -------------------------
@@ -173,6 +230,11 @@ def main():
     last_rx_time = time.time()
     batch_meta = None
 
+    # Data collection for reports
+    all_scores = []        # All scores calculated
+    all_samples = []       # All samples: {'tick', 'score', 'bits'}
+    best_history = []      # (tick, best_score_so_far) for evolution plot
+
     # We collect per-tick lines (one per slave) then score when a tick is complete
     tick_buffer = {}  # tick -> dict(slaveIndex -> (bmask, loss, noise, seed))
 
@@ -235,23 +297,26 @@ def main():
                         if len(vec) == NUM_SLAVES:
                             bits = np.concatenate(vec)
                             score = maxcut_score(bits, edges)
+                            bitstr = "".join(str(int(x)) for x in bits.tolist())
                             
-                            # UX: Progress indicator
-                            if tick % 10 == 0:
-                                print(".", end="", flush=True)
-                            if tick % 50 == 0:
-                                print(f" [{tick}/{BATCH_K}]", end="", flush=True)
-
+                            # Store for later analysis
+                            all_scores.append(score)
+                            all_samples.append({'tick': tick, 'score': score, 'bits': bitstr})
+                            
+                            # Track best score evolution
                             if score > best_score:
                                 best_score = score
                                 best_bits = bits.copy()
                                 best_tick = tick
-                                bitstr = "".join(str(int(x)) for x in best_bits.tolist())
-                                # Newline before printing best to not mess up dots
                                 print(f"\n[BEST] tick={best_tick} score={best_score:.2f} bits={bitstr}")
+                            
+                            best_history.append((tick, best_score))
+                            
+                            # UX: Progress indicator
+                            if tick % 50 == 0:
+                                print(f" [{tick}/{BATCH_K}]", end="", flush=True)
                                 
                         # cleanup old ticks to keep memory bounded
-                        # keep only last few ticks
                         if len(tick_buffer) > 50:
                             for old in sorted(tick_buffer.keys())[:-20]:
                                 tick_buffer.pop(old, None)
@@ -269,15 +334,108 @@ def main():
         except Exception:
             pass
 
-    print("\n--- RESULT ---")
-    print("Best score:", best_score)
+    # =========================================================================
+    # RESULTS AND REPORTS
+    # =========================================================================
+    print("\n" + "="*60)
+    print("                       RESULTADOS")
+    print("="*60)
+    print(f"Muestras recolectadas: {len(all_scores)}")
+    print(f"Mejor score: {best_score:.2f}")
     if best_bits is not None:
-        print("Best tick:", best_tick)
-        print("Bits:", "".join(str(int(x)) for x in best_bits.tolist()))
+        print(f"Mejor tick: {best_tick}")
+        print(f"Mejor config: {''.join(str(int(x)) for x in best_bits.tolist())}")
+        print(f"Score máximo teórico (anillo): {n_bits}")
+        print(f"Eficiencia: {100*best_score/n_bits:.1f}%")
     else:
         print("No valid samples scored.")
-    print("--------------")
+    print("="*60)
+
+    # -------------------------
+    # CSV EXPORT
+    # -------------------------
+    if len(all_samples) > 0:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_filename = f"maxcut_results_{timestamp}.csv"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.join(script_dir, csv_filename)
+        
+        try:
+            with open(csv_path, 'w') as f:
+                f.write("tick,score,bits,is_best\n")
+                for sample in all_samples:
+                    is_best = 1 if (best_bits is not None and sample['bits'] == ''.join(str(int(x)) for x in best_bits.tolist())) else 0
+                    f.write(f"{sample['tick']},{sample['score']},{sample['bits']},{is_best}\n")
+            print(f"\n[CSV] Datos guardados en: {csv_path}")
+        except Exception as e:
+            print(f"[CSV] Error guardando CSV: {e}")
+
+    # -------------------------
+    # GRAPHS
+    # -------------------------
+    if MATPLOTLIB_OK and len(all_scores) > 0:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        
+        # Graph 1: Score Evolution
+        ax1 = axes[0]
+        ticks_list = [h[0] for h in best_history]
+        scores_list = [h[1] for h in best_history]
+        ax1.plot(ticks_list, scores_list, 'b-', linewidth=2, label='Mejor score')
+        ax1.axhline(y=n_bits, color='g', linestyle='--', label=f'Máximo teórico ({n_bits})')
+        ax1.set_xlabel('Tick')
+        ax1.set_ylabel('Score Max-Cut')
+        ax1.set_title('Evolución del Mejor Score')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # Graph 2: Score Histogram
+        ax2 = axes[1]
+        ax2.hist(all_scores, bins=min(20, len(set(all_scores))), color='steelblue', edgecolor='white', alpha=0.8)
+        ax2.axvline(x=best_score, color='r', linestyle='--', linewidth=2, label=f'Mejor: {best_score:.1f}')
+        ax2.set_xlabel('Score')
+        ax2.set_ylabel('Frecuencia')
+        ax2.set_title('Distribución de Scores')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Save figure
+        fig_filename = f"maxcut_graphs_{timestamp}.png"
+        fig_path = os.path.join(script_dir, fig_filename)
+        try:
+            plt.savefig(fig_path, dpi=150)
+            print(f"[GRAPH] Gráficos guardados en: {fig_path}")
+        except Exception as e:
+            print(f"[GRAPH] Error guardando gráficos: {e}")
+        
+        plt.show()
+        
+    # Graph visualization with networkx
+    if NETWORKX_OK and MATPLOTLIB_OK and best_bits is not None:
+        try:
+            G = nx.Graph()
+            G.add_nodes_from(range(n_bits))
+            for (i, j, w) in edges:
+                G.add_edge(i, j, weight=w)
+            
+            colors = ['#ff6b6b' if b == 0 else '#4ecdc4' for b in best_bits]
+            pos = nx.circular_layout(G)
+            
+            fig2, ax3 = plt.subplots(1, 1, figsize=(8, 8))
+            nx.draw(G, pos, ax=ax3, node_color=colors, node_size=500, 
+                   with_labels=True, font_weight='bold', font_color='white',
+                   edge_color='gray', width=2)
+            ax3.set_title(f'Mejor Partición Max-Cut (Score: {best_score:.0f}/{n_bits})')
+            
+            graph_fig_path = os.path.join(script_dir, f"maxcut_graph_{timestamp}.png")
+            plt.savefig(graph_fig_path, dpi=150)
+            print(f"[GRAPH] Visualización del grafo guardada en: {graph_fig_path}")
+            plt.show()
+        except Exception as e:
+            print(f"[GRAPH] Error en visualización del grafo: {e}")
 
 
 if __name__ == "__main__":
     main()
+
