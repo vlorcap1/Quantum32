@@ -9,7 +9,7 @@ This document is designed to be explicit enough for another AI (or developer) to
 
 ---
 
-## 1. Current repository layout (as shipped in the ZIP)
+## 1. Current repository layout
 
 Root (high-level):
 - `master/`  
