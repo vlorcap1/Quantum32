@@ -8,13 +8,13 @@ El cliente funciona como el "Cerebro" que coordina al Master (ESP32) y procesa l
 
 ```mermaid
 graph TD
-    subgraph PC (Python Client V2)
+    subgraph PC ["Python Client V2"]
         GUI[Interface Dear PyGui]
         ANN[Lógica de Annealing]
         DRAW[Drawing API - Gráfico Circular]
     end
 
-    subgraph Hardware
+    subgraph HW ["Hardware"]
         M[Master ESP32]
         S1[Slave 1]
         S2[Slave 2]
