@@ -1,0 +1,12 @@
+# Quantum32 - Wikipedia Data Processor Dependencies
+# Install with: pip install -r requirements.txt
+
+# Wikipedia API
+wikipedia-api>=0.6.0
+
+# Scientific computing and data processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Machine learning and text processing
+scikit-learn>=1.3.0

@@ -163,6 +163,39 @@ Posibles mejoras:
 - [ ] Modo de bajo consumo para operación con batería
 - [*] Implementar cuantum life! revisa la carpeta cuantum_life para ver el código del juego de la vida. 
 
+## 📊 Wikipedia Data Processor
+
+**NUEVO**: Módulo de Python para procesar artículos de Wikipedia y convertirlos en representaciones numéricas para simulaciones cuánticas.
+
+### Características
+- Extracción automática de artículos desde Wikipedia
+- Limpieza y procesamiento de texto
+- Vectorización TF-IDF (conversión texto → números)
+- Export en múltiples formatos (CSV, NPY, JSON)
+
+### Inicio Rápido
+
+```bash
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Ejecutar ejemplos
+python ejemplo_uso.py
+
+# O usar en tu código
+from wikipedia_processor import WikipediaProcessor
+processor = WikipediaProcessor(language='es')
+data = processor.process_articles(['Mecánica cuántica', 'Qubit'])
+processor.export_data(data)
+```
+
+### Documentación
+- [Guía Rápida](QUICKSTART.md) - Inicio en 5 minutos
+- [Documentación Completa](WIKIPEDIA_PROCESSOR_README.md) - Ejemplos y casos de uso
+- [Script de Ejemplos](ejemplo_uso.py) - Demostraciones prácticas
+
+**Beneficio**: Transforma artículos de Wikipedia en vectores numéricos listos para usar en simulaciones Quantum32.
+
 ## 👤 Autor
 
 **Alejandro Rebolledo**  
