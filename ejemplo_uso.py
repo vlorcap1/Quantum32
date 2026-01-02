@@ -168,7 +168,13 @@ def ejemplo_quantum_encoding():
         vector = data['tfidf_matrix'][i]
         
         # Convertir a binario usando mediana como threshold
-        threshold = np.median(vector[vector > 0])
+        # Manejar caso de vector vacío o todo ceros
+        non_zero_values = vector[vector > 0]
+        if len(non_zero_values) > 0:
+            threshold = np.median(non_zero_values)
+        else:
+            threshold = 0.0
+        
         vector_binario = (vector > threshold).astype(int)
         
         bitstring = ''.join(map(str, vector_binario))

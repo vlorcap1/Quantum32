@@ -159,8 +159,8 @@ class WikipediaProcessor:
         # Eliminar URLs
         text = re.sub(r'http\S+|www\.\S+', '', text)
 
-        # Eliminar referencias [1], [2], etc.
-        text = re.sub(r'\[\d+\]', '', text)
+        # Eliminar referencias [1], [2], [1-3], etc.
+        text = re.sub(r'\[\d+(?:-\d+)?\]', '', text)
 
         # Eliminar caracteres especiales pero mantener espacios y puntuación básica
         text = re.sub(r'[^\w\s\.\,\;\:\-]', ' ', text)
@@ -170,7 +170,7 @@ class WikipediaProcessor:
 
         return text.strip()
 
-    def fetch_article(self, title: str) -> Optional[Dict[str, Any]]:
+    def fetch_article(self, title: str, summary_length: int = 500) -> Optional[Dict[str, Any]]:
         """
         Obtiene un artículo de Wikipedia.
 
@@ -192,7 +192,7 @@ class WikipediaProcessor:
         article = {
             'title': page.title,
             'url': page.fullurl,
-            'summary': page.summary[:500] if page.summary else '',  # Primeros 500 caracteres
+            'summary': page.summary[:summary_length] if page.summary else '',  # Configurable length
             'text': page.text,
             'categories': list(page.categories.keys())[:10],  # Primeras 10 categorías
             'links_count': len(page.links),
@@ -250,9 +250,16 @@ class WikipediaProcessor:
         # Vectorización TF-IDF
         print(f"  - Vectorizando con TF-IDF (max_features={self.max_features})...")
 
+        # Configure stop words based on language
+        stop_words_config = None
+        if self.language in ['en', 'english']:
+            stop_words_config = 'english'
+        # Note: scikit-learn has limited language support for stop words
+        # For Spanish and other languages, consider using external libraries
+
         vectorizer = TfidfVectorizer(
             max_features=self.max_features,
-            stop_words=None,  # Se puede configurar para español
+            stop_words=stop_words_config,
             ngram_range=(1, 2),  # Unigramas y bigramas
             min_df=1,
             max_df=0.95
@@ -304,7 +311,12 @@ class WikipediaProcessor:
 
         if not articles:
             print("\n⚠ No se obtuvieron artículos. Abortando.")
-            return None
+            return {
+                'articles': [],
+                'tfidf_matrix': None,
+                'feature_names': [],
+                'metadata': {'n_articles': 0, 'n_features': 0}
+            }
 
         # Vectorizar
         tfidf_matrix, feature_names, metadata = self.tokenize_and_vectorize(articles)
@@ -492,6 +504,8 @@ def safe_input(prompt: str, default: Any) -> str:
     try:
         value = input(f"{prompt} [{default}]: ").strip()
         return value if value else str(default)
+    except (EOFError, KeyboardInterrupt):
+        return str(default)
     except Exception:
         return str(default)
 
@@ -515,7 +529,12 @@ def main():
     # Solicitar configuración
     print("\n--- CONFIGURACIÓN ---")
     language = safe_input("Idioma de Wikipedia (es/en)", DEFAULT_LANGUAGE)
-    max_features = int(safe_input("Máximo de features TF-IDF", DEFAULT_MAX_FEATURES))
+    
+    try:
+        max_features = int(safe_input("Máximo de features TF-IDF", DEFAULT_MAX_FEATURES))
+    except ValueError:
+        print(f"  ⚠ Valor inválido, usando default: {DEFAULT_MAX_FEATURES}")
+        max_features = DEFAULT_MAX_FEATURES
 
     # Solicitar artículos
     print("\n--- ARTÍCULOS A PROCESAR ---")
